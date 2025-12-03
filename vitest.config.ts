@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { testDbConfig } from './tests/setup.js';
 
 export default defineConfig({
   test: {
@@ -13,9 +14,10 @@ export default defineConfig({
         singleFork: true,
       },
     },
+    globalSetup: './tests/setup.ts',
     env: {
       NODE_ENV: 'test',
-      DATABASE_URL: 'file:./test.db',
+      DATABASE_URL: testDbConfig.DATABASE_URL,
     },
     coverage: {
       provider: 'v8',
