@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
       - name: okr-api
-        image: okr-management-app:latest
-        imagePullPolicy: IfNotPresent
+        image: __IMAGE_TAG__
+        imagePullPolicy: Always
         ports:
         - containerPort: 3000
           name: http

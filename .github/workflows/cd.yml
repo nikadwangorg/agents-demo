@@ -1,0 +1,138 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/okr-system
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.x'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Generate Prisma Client
+      run: npx prisma generate
+
+    - name: Run tests
+      run: npm test
+
+    - name: Build TypeScript
+      run: npm run build
+
+    - name: Extract version
+      id: version
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+        chmod 600 $HOME/.kube/config
+
+    - name: Verify cluster connection
+      run: kubectl cluster-info
+
+    - name: Update Kubernetes deployment
+      run: |
+        export IMAGE_TAG="${{ steps.version.outputs.VERSION }}"
+        
+        # Update deployment image with new version
+        sed -i "s|image: okr-management-app:latest|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}|g" k8s/deployment.yaml
+        
+        # Apply Kubernetes manifests
+        kubectl apply -f k8s/secret.yaml
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+
+    - name: Wait for rollout completion
+      run: |
+        kubectl rollout status deployment/okr-management-app -n default --timeout=5m
+
+    - name: Get service endpoint
+      id: service
+      run: |
+        # Wait for LoadBalancer IP assignment (if using LoadBalancer type)
+        echo "Waiting for service endpoint..."
+        for i in {1..30}; do
+          EXTERNAL_IP=$(kubectl get svc okr-management-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+          if [ -n "$EXTERNAL_IP" ]; then
+            echo "SERVICE_IP=${EXTERNAL_IP}" >> $GITHUB_OUTPUT
+            break
+          fi
+          sleep 10
+        done
+        
+        # If ClusterIP, get cluster IP instead
+        if [ -z "$EXTERNAL_IP" ]; then
+          CLUSTER_IP=$(kubectl get svc okr-management-service -o jsonpath='{.spec.clusterIP}')
+          echo "SERVICE_IP=${CLUSTER_IP}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Health check
+      run: |
+        SERVICE_IP="${{ steps.service.outputs.SERVICE_IP }}"
+        if [ -n "$SERVICE_IP" ]; then
+          echo "Testing health endpoint at http://${SERVICE_IP}/health"
+          
+          # Port-forward for testing if ClusterIP
+          kubectl port-forward svc/okr-management-service 8080:80 &
+          PF_PID=$!
+          sleep 5
+          
+          # Health check
+          curl -f http://localhost:8080/health || exit 1
+          
+          kill $PF_PID
+        fi
+
+    - name: Deployment summary
+      run: |
+        echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image**: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Service IP**: ${{ steps.service.outputs.SERVICE_IP }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Namespace**: default" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Pod Status" >> $GITHUB_STEP_SUMMARY
+        kubectl get pods -l app=okr-management >> $GITHUB_STEP_SUMMARY
