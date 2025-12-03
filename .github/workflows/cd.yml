@@ -78,7 +78,7 @@ jobs:
         export IMAGE_TAG="${{ steps.version.outputs.VERSION }}"
         
         # Update deployment image with new version
-        sed -i "s|image: okr-management-app:latest|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}|g" k8s/deployment.yaml
+        sed -i "s|__IMAGE_TAG__|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}|g" k8s/deployment.yaml
         
         # Apply Kubernetes manifests
         kubectl apply -f k8s/secret.yaml
