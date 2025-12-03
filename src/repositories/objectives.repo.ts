@@ -1,7 +1,6 @@
-import { PrismaClient, Objective } from '@prisma/client';
+import { Objective } from '@prisma/client';
 import { CreateObjectiveInput } from '../models/objectives.model.js';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma.js';
 
 export class ObjectivesRepository {
   async create(data: CreateObjectiveInput): Promise<Objective> {

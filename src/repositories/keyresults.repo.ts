@@ -1,10 +1,9 @@
-import { PrismaClient, KeyResult } from '@prisma/client';
+import { KeyResult } from '@prisma/client';
 import {
   CreateKeyResultInput,
   UpdateKeyResultInput,
 } from '../models/keyresults.model.js';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma.js';
 
 export class KeyResultsRepository {
   async create(
