@@ -8,18 +8,16 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 
 beforeAll(async () => {
   app = await buildApp();
-});
+  await app.ready();
+  // Clean database once at start
+  await prisma.keyResult.deleteMany();
+  await prisma.objective.deleteMany();
+}, 30000);
 
 afterAll(async () => {
   await app.close();
   await prisma.$disconnect();
-});
-
-beforeEach(async () => {
-  // Clean database before each test
-  await prisma.keyResult.deleteMany();
-  await prisma.objective.deleteMany();
-});
+}, 30000);
 
 describe('Objectives API', () => {
   describe('POST /objectives', () => {
@@ -73,6 +71,10 @@ describe('Objectives API', () => {
 
   describe('GET /objectives', () => {
     it('should return empty array when no objectives exist', async () => {
+      // Clean database for this specific test
+      await prisma.keyResult.deleteMany();
+      await prisma.objective.deleteMany();
+      
       const response = await supertest(app.server)
         .get('/objectives')
         .expect(200);
@@ -81,6 +83,10 @@ describe('Objectives API', () => {
     });
 
     it('should return all objectives with progress', async () => {
+      // Clean database for this specific test
+      await prisma.keyResult.deleteMany();
+      await prisma.objective.deleteMany();
+      
       // Create objective
       const obj1 = await supertest(app.server)
         .post('/objectives')

@@ -8,23 +8,22 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 
 beforeAll(async () => {
   app = await buildApp();
-});
+  await app.ready();
+  // Clean database once at start
+  await prisma.keyResult.deleteMany();
+  await prisma.objective.deleteMany();
+}, 30000);
 
 afterAll(async () => {
   await app.close();
   await prisma.$disconnect();
-});
-
-beforeEach(async () => {
-  await prisma.keyResult.deleteMany();
-  await prisma.objective.deleteMany();
-});
+}, 30000);
 
 describe('Key Results API', () => {
   let objectiveId: string;
 
   beforeEach(async () => {
-    // Create a test objective
+    // Create a test objective for each test
     const response = await supertest(app.server)
       .post('/objectives')
       .send({ title: 'Test Objective' });
