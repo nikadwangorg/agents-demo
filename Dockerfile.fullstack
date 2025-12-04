@@ -160,15 +160,22 @@ RUN mkdir -p /data && \
 
 # Create Nginx directories and log files with proper permissions for non-root user
 # Note: Log files must be created explicitly because nginx opens error log before reading config
-RUN mkdir -p /var/lib/nginx/logs \
+# Also create /var/log/nginx as nginx may try to access this default path on startup
+# Remove and recreate nginx directories to ensure clean ownership (apk may create them with root)
+# Logs are configured in nginx.conf to use /var/lib/nginx/logs/ but we create both paths
+# for robustness in case nginx tries to access the default /var/log/nginx/ path at startup
+RUN rm -rf /var/lib/nginx /var/log/nginx /run/nginx && \
+    mkdir -p /var/lib/nginx/logs \
              /var/lib/nginx/tmp/client_body \
              /var/lib/nginx/tmp/proxy \
              /var/lib/nginx/tmp/fastcgi \
              /var/lib/nginx/tmp/uwsgi \
              /var/lib/nginx/tmp/scgi \
+             /var/log/nginx \
              /run/nginx && \
-    touch /var/lib/nginx/logs/error.log /var/lib/nginx/logs/access.log && \
-    chown -R nodejs:nodejs /var/lib/nginx /run/nginx
+    touch /var/lib/nginx/logs/error.log /var/lib/nginx/logs/access.log \
+          /var/log/nginx/error.log /var/log/nginx/access.log && \
+    chown -R nodejs:nodejs /var/lib/nginx /var/log/nginx /run/nginx
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
