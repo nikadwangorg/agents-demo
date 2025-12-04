@@ -51,8 +51,8 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Build Docker image
-      run: docker build -t okr-management-app:${{ github.sha }} .
+    - name: Build Docker image (Full Stack)
+      run: docker build -f Dockerfile.fullstack -t okr-fullstack:${{ github.sha }} .
 
     - name: Tag as latest
-      run: docker tag okr-management-app:${{ github.sha }} okr-management-app:latest
+      run: docker tag okr-fullstack:${{ github.sha }} okr-fullstack:latest
