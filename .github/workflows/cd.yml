@@ -55,10 +55,11 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build and push Docker image
+    - name: Build and push Docker image (Full Stack)
       uses: docker/build-push-action@v5
       with:
         context: .
+        file: ./Dockerfile.fullstack
         push: true
         tags: |
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
@@ -88,12 +89,16 @@ jobs:
       run: |
         export IMAGE_TAG="${{ steps.version.outputs.VERSION }}"
         
-        # Update deployment image with new version
-        sed -i "s|__IMAGE_TAG__|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}|g" k8s/deployment.yaml
+        # Create temporary directory for modified manifests
+        mkdir -p /tmp/k8s
+        cp k8s/*.yaml /tmp/k8s/
         
-        # Apply Kubernetes manifests
+        # Update deployment image with new version
+        sed -i "s|__IMAGE_TAG__|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}|g" /tmp/k8s/deployment.yaml
+        
+        # Apply Kubernetes manifests (skip frontend deployment)
         kubectl apply -f k8s/secret.yaml
-        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f /tmp/k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
 
     - name: Wait for rollout completion
@@ -122,20 +127,20 @@ jobs:
 
     - name: Health check
       run: |
-        SERVICE_IP="${{ steps.service.outputs.SERVICE_IP }}"
-        if [ -n "$SERVICE_IP" ]; then
-          echo "Testing health endpoint at http://${SERVICE_IP}/health"
-          
-          # Port-forward for testing if ClusterIP
-          kubectl port-forward svc/okr-management-service 8080:80 &
-          PF_PID=$!
-          sleep 5
-          
-          # Health check
-          curl -f http://localhost:8080/health || exit 1
-          
-          kill $PF_PID
-        fi
+        echo "Testing health endpoint via port-forward..."
+        
+        # Port-forward for testing
+        kubectl port-forward svc/okr-management-service 8080:80 &
+        PF_PID=$!
+        sleep 10
+        
+        # Health check (fullstack image serves on port 80)
+        curl -f http://localhost:8080/health || exit 1
+        
+        # Test frontend
+        curl -f http://localhost:8080/ || exit 1
+        
+        kill $PF_PID || true
 
     - name: Deployment summary
       run: |

@@ -1,0 +1,165 @@
+# Multi-stage build for Full Stack OKR Management App
+# This Dockerfile builds both frontend and backend in a single image
+
+# Stage 1: Build Frontend
+FROM node:22-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy frontend package files
+COPY frontend/package*.json ./
+
+# Install frontend dependencies
+RUN npm ci
+
+# Copy frontend source
+COPY frontend/ ./
+
+# Build frontend (generates static files in dist/)
+RUN npm run build
+
+# Stage 2: Build Backend
+FROM node:22-alpine AS backend-builder
+
+WORKDIR /app
+
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
+
+# Copy backend package files
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install backend dependencies
+RUN npm ci
+
+# Copy backend source
+COPY src ./src/
+COPY tsconfig.json ./
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build TypeScript
+RUN npm run build
+
+# Stage 3: Production Runtime
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Install OpenSSL and Nginx for serving frontend
+RUN apk add --no-cache openssl nginx
+
+# Copy backend package files
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install production dependencies only
+RUN npm ci --only=production
+
+# Copy Prisma generated client from backend builder
+COPY --from=backend-builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=backend-builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy built backend application
+COPY --from=backend-builder /app/dist ./dist
+
+# Copy built frontend application
+COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
+
+# Copy Nginx configuration
+COPY <<'EOF' /etc/nginx/http.d/default.conf
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/json application/xml+rss;
+
+    # Frontend routes
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+    }
+
+    # Cache static assets
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Proxy API requests to backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Health check endpoint
+    location /health {
+        proxy_pass http://127.0.0.1:3000/health;
+    }
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+}
+EOF
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Create data directory for SQLite database
+RUN mkdir -p /data && \
+    chown -R nodejs:nodejs /data
+
+# Change ownership
+RUN chown -R nodejs:nodejs /app
+
+# Create startup script
+COPY <<'EOF' /app/start.sh
+#!/bin/sh
+set -e
+
+# Start backend in background
+echo "Starting backend server..."
+cd /app
+npx prisma migrate deploy
+NODE_ENV=production node dist/server.js &
+
+# Wait for backend to be ready
+echo "Waiting for backend to start..."
+sleep 5
+
+# Start Nginx in foreground
+echo "Starting Nginx..."
+exec nginx -g 'daemon off;'
+EOF
+
+RUN chmod +x /app/start.sh
+
+USER nodejs
+
+# Expose port 80 for web access
+EXPOSE 80
+
+# Health check (check both frontend and backend)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost/health || exit 1
+
+# Run startup script
+CMD ["/app/start.sh"]

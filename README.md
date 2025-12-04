@@ -1,9 +1,10 @@
 # OKR Management App
 
-一个基于 TypeScript、Fastify 和 Prisma 构建的 OKR（Objectives and Key Results）管理系统后端 API。
+一个基于 TypeScript、Fastify 和 Prisma 构建的完整 OKR（Objectives and Key Results）管理系统，包含前后端。
 
 ## 功能特性
 
+### 后端 API
 - ✅ 创建、查询、删除目标（Objectives）
 - ✅ 为目标添加关键结果（Key Results）
 - ✅ 更新关键结果的完成进度
@@ -16,8 +17,17 @@
 - ✅ Docker 容器化
 - ✅ Kubernetes 部署配置
 
+### 前端 Web 应用
+- ✅ 现代化 React 界面（React 18 + TypeScript）
+- ✅ 响应式设计（Chakra UI）
+- ✅ 实时数据同步（TanStack Query）
+- ✅ 可视化进度追踪
+- ✅ 直观的 CRUD 操作
+- ✅ 生产级部署配置（Nginx + Docker）
+
 ## 技术栈
 
+### 后端
 - **运行时**: Node.js 22
 - **Web 框架**: Fastify
 - **数据库**: SQLite (通过 Prisma)
@@ -26,40 +36,95 @@
 - **代码质量**: ESLint + Prettier
 - **部署**: Docker + Kubernetes
 
+### 前端
+- **框架**: React 18
+- **构建工具**: Vite
+- **UI 库**: Chakra UI
+- **状态管理**: TanStack Query
+- **HTTP 客户端**: Axios
+- **语言**: TypeScript
+- **部署**: Nginx + Docker
+
 ## 快速开始
 
-### 1. 安装依赖
+### 方式一：本地开发（推荐用于开发）
+
+#### 1. 启动后端
 
 ```bash
+# 安装依赖
 npm install
-```
 
-### 2. 配置环境变量
-
-创建 `.env` 文件（已提供默认配置）：
-
-```bash
-DATABASE_URL="file:./dev.db"
-PORT=3000
-NODE_ENV=development
-```
-
-### 3. 初始化数据库
-
-```bash
+# 初始化数据库
 npm run prisma:generate
 npm run prisma:migrate
-```
 
-### 4. 启动开发服务器
-
-```bash
+# 启动后端服务
 npm run dev
 ```
 
-服务将运行在 `http://localhost:3000`
+后端将运行在 `http://localhost:3000`
 
-### 5. 运行测试
+#### 2. 启动前端
+
+```bash
+# 进入前端目录
+cd frontend
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+前端将运行在 `http://localhost:5173`
+
+现在访问 `http://localhost:5173` 即可使用完整的 OKR 管理系统！
+
+### 方式二：Docker 部署（推荐用于生产）
+
+#### 全栈单镜像部署
+
+使用 Dockerfile.fullstack 构建包含前后端的单个镜像：
+
+```bash
+# 构建全栈镜像
+docker build -f Dockerfile.fullstack -t okr-fullstack:latest .
+
+# 运行容器
+docker run -d -p 8080:80 \
+  -e DATABASE_URL="file:/data/prod.db" \
+  -v okr-data:/data \
+  --name okr-app \
+  okr-fullstack:latest
+```
+
+现在访问 `http://localhost:8080` 即可使用完整应用！
+
+> 📖 **详细部署文档**: 查看 [Docker 全栈部署指南](docs/DOCKER_FULLSTACK.md)
+
+### 方式三：Kubernetes 部署
+
+```bash
+# 创建 Secret
+kubectl apply -f k8s/secret.yaml
+
+# 部署后端
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+
+# 部署前端
+kubectl apply -f k8s/frontend.yaml
+
+# 检查状态
+kubectl get pods
+kubectl get services
+```
+
+## 测试
+
+### 后端测试
 
 ```bash
 # 运行所有测试
@@ -68,6 +133,10 @@ npm test
 # 监听模式
 npm run test:watch
 ```
+
+### 前端测试
+
+前端当前专注于功能实现，测试可在后续迭代中添加。
 
 ## API 文档
 
