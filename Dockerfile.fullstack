@@ -68,7 +68,38 @@ COPY --from=backend-builder /app/dist ./dist
 # Copy built frontend application
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
-# Copy Nginx configuration
+# Copy custom nginx.conf for non-root user
+COPY <<'EOF' /etc/nginx/nginx.conf
+# Nginx configuration for non-root user
+worker_processes auto;
+pid /run/nginx/nginx.pid;
+error_log /var/lib/nginx/logs/error.log warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # Temp paths writable by non-root user
+    client_body_temp_path /var/lib/nginx/tmp/client_body;
+    proxy_temp_path /var/lib/nginx/tmp/proxy;
+    fastcgi_temp_path /var/lib/nginx/tmp/fastcgi;
+    uwsgi_temp_path /var/lib/nginx/tmp/uwsgi;
+    scgi_temp_path /var/lib/nginx/tmp/scgi;
+
+    access_log /var/lib/nginx/logs/access.log;
+
+    sendfile on;
+    keepalive_timeout 65;
+
+    include /etc/nginx/http.d/*.conf;
+}
+EOF
+
+# Copy Nginx site configuration
 COPY <<'EOF' /etc/nginx/http.d/default.conf
 server {
     listen 80;
@@ -126,6 +157,16 @@ RUN addgroup -g 1001 -S nodejs && \
 # Create data directory for SQLite database
 RUN mkdir -p /data && \
     chown -R nodejs:nodejs /data
+
+# Create Nginx directories with proper permissions for non-root user
+RUN mkdir -p /var/lib/nginx/logs \
+             /var/lib/nginx/tmp/client_body \
+             /var/lib/nginx/tmp/proxy \
+             /var/lib/nginx/tmp/fastcgi \
+             /var/lib/nginx/tmp/uwsgi \
+             /var/lib/nginx/tmp/scgi \
+             /run/nginx && \
+    chown -R nodejs:nodejs /var/lib/nginx /run/nginx
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
