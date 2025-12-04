@@ -100,9 +100,10 @@ http {
 EOF
 
 # Copy Nginx site configuration
+# Use port 8080 instead of 80 to allow non-root user to bind
 COPY <<'EOF' /etc/nginx/http.d/default.conf
 server {
-    listen 80;
+    listen 8080;
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
@@ -205,12 +206,12 @@ RUN chmod +x /app/start.sh
 
 USER nodejs
 
-# Expose port 80 for web access
-EXPOSE 80
+# Expose port 8080 for web access (non-root user cannot bind to port 80)
+EXPOSE 8080
 
 # Health check (check both frontend and backend)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Run startup script
 CMD ["/app/start.sh"]
