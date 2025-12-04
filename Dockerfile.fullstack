@@ -158,7 +158,8 @@ RUN addgroup -g 1001 -S nodejs && \
 RUN mkdir -p /data && \
     chown -R nodejs:nodejs /data
 
-# Create Nginx directories with proper permissions for non-root user
+# Create Nginx directories and log files with proper permissions for non-root user
+# Note: Log files must be created explicitly because nginx opens error log before reading config
 RUN mkdir -p /var/lib/nginx/logs \
              /var/lib/nginx/tmp/client_body \
              /var/lib/nginx/tmp/proxy \
@@ -166,6 +167,7 @@ RUN mkdir -p /var/lib/nginx/logs \
              /var/lib/nginx/tmp/uwsgi \
              /var/lib/nginx/tmp/scgi \
              /run/nginx && \
+    touch /var/lib/nginx/logs/error.log /var/lib/nginx/logs/access.log && \
     chown -R nodejs:nodejs /var/lib/nginx /run/nginx
 
 # Change ownership
@@ -187,8 +189,9 @@ echo "Waiting for backend to start..."
 sleep 5
 
 # Start Nginx in foreground
+# Use -e flag to specify error log before config is read (avoids permission denied on startup)
 echo "Starting Nginx..."
-exec nginx -g 'daemon off;'
+exec nginx -e /var/lib/nginx/logs/error.log -g 'daemon off;'
 EOF
 
 RUN chmod +x /app/start.sh
