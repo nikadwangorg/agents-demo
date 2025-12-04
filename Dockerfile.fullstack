@@ -162,6 +162,8 @@ RUN mkdir -p /data && \
 # Note: Log files must be created explicitly because nginx opens error log before reading config
 # Also create /var/log/nginx as nginx may try to access this default path on startup
 # Remove and recreate nginx directories to ensure clean ownership (apk may create them with root)
+# Logs are configured in nginx.conf to use /var/lib/nginx/logs/ but we create both paths
+# for robustness in case nginx tries to access the default /var/log/nginx/ path at startup
 RUN rm -rf /var/lib/nginx /var/log/nginx /run/nginx && \
     mkdir -p /var/lib/nginx/logs \
              /var/lib/nginx/tmp/client_body \
